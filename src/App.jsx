@@ -1,50 +1,126 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+import React, { useEffect, useState } from 'react';
+import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
+import {
+  AppBar,
+  Box,
+  Checkbox,
+  FormControl,
+  InputLabel,
+  ListItemText,
+  MenuItem,
+  OutlinedInput,
+  Select,
+  Toolbar,
+  Typography,
+} from '@mui/material';
+import MenuStore from "./store/MenuStore.jsx";
+
+export const servicesInfo = {
+  gitUtil: { displayName: "图传工具", priority: 3 },
+  imageProcessing: { displayName: "图片处理", priority: 1 },
+  imageAI: { displayName: "图片AI", priority: 2 },
+  excelScript: { displayName: "Excel & Script", priority: 4 },
+  fileConversion: { displayName: "文件转换", priority: 5 },
+  imageUpload: { displayName: "图传", priority: 6 },
+};
+
+export const defaultSubscriptions = {
+  gitUtil: true,
+  imageProcessing: true,
+  imageAI: true,
+  excelScript: true,
+  fileConversion: true,
+  imageUpload: true
+};
+
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+  const [subscriptions, setSubscriptions] = useState({});
+  const location = useLocation();
+  const menuStore = new MenuStore();
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
+  useEffect(() => {
+    async function loadSubscriptions() {
+      try {
+        const loadedSubscriptions = await menuStore.load();
+        setSubscriptions(loadedSubscriptions || defaultSubscriptions);
+      } catch (error) {
+        console.error("Failed to load subscriptions:", error);
+      }
+    }
+
+    loadSubscriptions();
+  }, []);
+
+  function handleSubscriptionChange(event) {
+    const { value } = event.target;
+    const newSubscriptions = {};
+    Object.keys(servicesInfo).forEach(service => {
+      newSubscriptions[service] = value.includes(service);
+    });
+    menuStore.save(newSubscriptions);
+    setSubscriptions(newSubscriptions);
+  }
+
+  const selectedServices = Object.keys(subscriptions).filter(service => subscriptions[service]);
+
+  // 默认页面重定向逻辑
+  const getDefaultRedirect = () => {
+    const sortedServices = Object.keys(servicesInfo)
+      .sort((a, b) => servicesInfo[a].priority - servicesInfo[b].priority)
+      .find(service => subscriptions[service]);
+    return sortedServices ? `/views/${sortedServices}` : '/';
+  };
+
+  if (location.pathname === '/') {
+    const defaultRedirectPath = getDefaultRedirect();
+    if (defaultRedirectPath !== '/') {
+      return <Navigate to={defaultRedirectPath} />;
+    }
   }
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vitejs.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://reactjs.org" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+    <div>
+      <AppBar position="static">
+        <Toolbar>
+          {selectedServices.map(service => (
+            <Typography
+              key={service}
+              variant="h6"
+              component={Link}
+              to={`/views/${service}`}
+              style={{
+                marginRight: 20,
+                textDecoration: 'none',
+                color: location.pathname === `/views/${service}` ? 'yellow' : 'inherit'
+              }}
+            >
+              {servicesInfo[service].displayName}
+            </Typography>
+          ))}
+          <Box sx={{ flexGrow: 1 }} />
+          <FormControl sx={{ m: 1, minWidth: 120 }}>
+            <InputLabel id="demo-multiple-checkbox-label">订阅</InputLabel>
+            <Select
+              labelId="demo-multiple-checkbox-label"
+              multiple
+              value={selectedServices}
+              onChange={handleSubscriptionChange}
+              input={<OutlinedInput label="订阅" />}
+              renderValue={() => selectedServices.map(service => servicesInfo[service].displayName).join(', ')}
+            >
+              {Object.keys(servicesInfo).map((service) => (
+                <MenuItem key={service} value={service}>
+                  <Checkbox checked={subscriptions[service]} />
+                  <ListItemText primary={servicesInfo[service].displayName} />
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Toolbar>
+      </AppBar>
+      <Outlet />
+    </div>
   );
 }
 
